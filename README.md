@@ -32,7 +32,16 @@ Planned (later milestones): `eval`, `traffic`, `chaos`, `prompt:add`.
 - `src/lib/types.ts`: domain types (`Order`, `PolicyResult`, `Extraction`, `ReasonCode`, ...)
 - `src/lib/policy.ts`: `evaluateRefund`, pure refund rules
 - `src/lib/redact.ts`: `redactPII`, pure card/SSN scrubbing, run before the LLM and before storage
+- `src/lib/decide.ts`: `decideTicket` guardrails G1–G6 (LLM down, injection, not a refund, no order id, identity mismatch), then policy
+- `src/lib/replies.ts`: `buildReply` customer templates; escalations always use a generic reply (no internal codes leak)
+- `src/lib/model.ts`: `AnthropicModel` (fetch), `HeuristicModel` (regex, no key), `MockModel` (tests), `ChaosModel`, `getModelFromEnv`
+- `src/lib/extract.ts`: zod schema, `parseExtraction`, `extractTicket` (per-attempt timeout, retry on timeout/429/5xx/bad JSON, no retry on other 4xx)
+- `src/lib/refunds.ts`: `authorizeRefund` (agent ≤ $200, exact amount, delivered only) and `issueRefund`
+- `src/lib/trace.ts` / `pipeline.ts`: `processTicket` runs redact → extract → lookup → decide → refund → reply, recording a span per step
 - `src/lib/db.ts`: `getDb()`, the only DB access point; server code only
+- `src/app/`: Inbox `/` (submit + last 50 tickets), `/tickets/[id]` (email, extraction, decision, trace), `/approvals` (human queue)
+- `src/app/api/`: `POST /api/tickets`, `POST /api/approvals/[ticketId]`
+- `src/components/`: `Nav`, `DecisionBadge`, `TicketForm`, `ApprovalButtons`
 - `scripts/seed.ts`: DB seeding
 - `spec/`: spec, schema, seed orders, eval datasets, acceptance tests (read-only)
 - `prompts/`: versioned LLM prompts
@@ -46,10 +55,20 @@ Pure modules never read env or import `db.ts`; `src/lib/` and `scripts/` use rel
 | M0 Setup (env, db, seed) | done |
 | M1 Deterministic core: base policy, PII redaction | done |
 | M2 Policy v2 (TDD): tiers, final sale, defects, abuse review | done |
-| M3 LLM layer, pipeline, tickets/approvals UI | next |
-| M4 Evals and prompt release management | todo |
+| M3 LLM layer, pipeline, tickets/approvals UI | done |
+| M4 Evals and prompt release management | next |
 | M5 Metrics, alerts, `/ops`, cron, traffic/chaos | todo |
 | M6 Game day: runbook, postmortem, retire v1 | todo |
+
+## API
+- `POST /api/tickets` `{from_email, subject, body}` → 201 `{ticket_id, decision, reason_code, refund_amount_cents, reply, status, ...}`.
+  `dry_run` and `expected_*` labels need the `x-traffic-secret` header (= `CRON_SECRET`), else 403. 503 if no live prompt.
+- `POST /api/approvals/[ticketId]` `{action: approve|deny}` → 200 `{ticket}`; 404 / 409 `NOT_PENDING` / 422 `REFUND_NOT_AUTHORIZED`.
+- Errors are always `{error, message, details?}`.
+
+## LLM provider
+`LLM_PROVIDER=anthropic` needs an `ANTHROPIC_API_KEY` (workspace-scoped keys only). If the LLM fails, the ticket is escalated
+as `LLM_UNAVAILABLE`, never guessed. Set `LLM_PROVIDER=heuristic` to run without a key.
 
 ## Policy (v2, first match wins; `reason: other` counts as `changed_mind`)
 1. No order → deny · 2. Already refunded → deny · 3. In transit → deny · 4. Gift card → deny
