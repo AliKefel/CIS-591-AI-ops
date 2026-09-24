@@ -116,6 +116,9 @@ tests/extract.test.ts
 tests/refunds.test.ts
 tests/evaluate.test.ts
 tests/metrics.test.ts
+components.json                             (provided)
+src/lib/utils.ts                            (provided — shadcn)
+src/components/ui/**                        (provided — shadcn, never edit)
 ```
 
 ---
@@ -504,9 +507,16 @@ Same as `/api/ops/check`, but requires `Authorization: Bearer <CRON_SECRET>` →
 
 ## 10. UI
 
-Tailwind only, desktop-first, max width `max-w-6xl`, neutral grays. Server components read via `src/lib` functions;
-client components call the API routes, then `router.refresh()`. Every button disables while pending and shows errors inline.
-`DecisionBadge`: approve `bg-green-600`, deny `bg-red-600`, escalate `bg-amber-500`, white text.
+Use shadcn/ui components from `src/components/ui/` plus Tailwind utilities. Do not add, remove,
+or regenerate shadcn components, and do not run the shadcn CLI. Desktop-first, `max-w-6xl`.
+Component mapping (exact):
+- Page sections and SLO cards → `Card` (`CardHeader`, `CardTitle`, `CardContent`)
+- All tables → `Table`
+- Forms → `Label` + `Input` / `Textarea`; actions → `Button` (primary actions default variant,
+  Deny/Retire/Rollback use `variant="destructive"`, secondary actions `variant="outline"`)
+- Inline errors and the approvals empty state → `Alert`
+- `DecisionBadge` → `Badge` with className: approve `bg-green-600`, deny `bg-red-600`, escalate `bg-amber-500`, white text
+- Status, severity, and prompt-version labels → `Badge variant="outline"`; critical severity and breached SLO cards → `border-red-600`
 
 **`Nav`** (in layout, all pages): `RefundDesk` · Inbox (`/`) · Approvals (`/approvals`) · Ops (`/ops`).
 Right side: `Live prompt: v1` badge; if chaos mode ≠ `none`, a red `CHAOS: <mode>` badge.
