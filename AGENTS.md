@@ -40,7 +40,7 @@ Next.js (App Router, `src/`, TypeScript) · Tailwind CSS · `@supabase/supabase-
 6. Business logic uses `STORE_DATE` from `src/lib/config.ts` as "now". Never call `new Date()` for policy decisions.
 7. Database access only through `getDb()` in `src/lib/db.ts`, only from server code. Never import `db.ts` in a client component. Never expose `SUPABASE_SERVICE_ROLE_KEY`.
 8. Pure modules (`policy`, `redact`, `decide`, `replies`, `extract`, `evaluate`, `metrics`, `monitor` rule evaluation, `refunds` authorization) must not read env vars or import `db.ts` at module load.
-9. UI: use only the shadcn/ui components in `src/components/ui/` plus Tailwind utilities, following SPEC §10 (dark default theme, vertical sidebar, hand-built charts in `charts.tsx`). Never run the shadcn CLI or add UI, theme or chart **libraries**. Verify UI in a browser in both themes (SPEC §17.7).
+9. UI: use only the shadcn/ui components in `src/components/ui/` plus Tailwind utilities, following SPEC §10 (dark default theme, vertical sidebar, hand-built charts in `charts.tsx`). Never run the shadcn CLI or add UI, theme or chart **libraries**. Verify UI in a browser in both themes (SPEC §17.8).
 10. Next.js 15+: dynamic route `params` are Promises — `await params`. Check the installed version in `node_modules/next/package.json` and follow its conventions.
 11. Secrets live only in `.env.local`. Never hard-code keys.
 12. Do not read `spec/evals/drift.jsonl` before M6, and never touch `prompt_versions` / `eval_runs` from demo code (SPEC §17.1).

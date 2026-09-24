@@ -2,6 +2,7 @@ import Link from 'next/link';
 import PageHeader from '@/components/PageHeader';
 import { HBarList, Ring, Sparkline, StackedBar, StackedColumns } from '@/components/charts';
 import { Badge } from '@/components/ui/badge';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getDb } from '@/lib/db';
 import { computeMetrics, type MetricTicket } from '@/lib/metrics';
@@ -129,10 +130,13 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Executive dashboard"
-        description={`RefundDesk at a glance: business impact, AI quality, risk and release status across ${total.toLocaleString()} tickets.`}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader
+          title="Executive dashboard"
+          description={`RefundDesk at a glance: business impact, AI quality, risk and release status across ${total.toLocaleString()} tickets.`}
+        />
+        <Link href="/simulate" className={buttonVariants()}>Simulate live cases</Link>
+      </div>
 
       {/* Business KPIs */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

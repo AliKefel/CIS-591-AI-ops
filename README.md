@@ -42,8 +42,8 @@ LLM via Anthropic Messages API (`fetch`), or a no-key `heuristic` provider.
 - `src/lib/refunds.ts`: `authorizeRefund` (agent ≤ $200, exact amount, delivered only) and `issueRefund`
 - `src/lib/trace.ts` / `pipeline.ts`: `processTicket` runs redact → extract → lookup → decide → refund → reply, recording a span per step
 - `src/lib/db.ts`: `getDb()`, the only DB access point; server code only
-- `src/app/`: Inbox `/` (submit, recent tickets; rows open the detail view), `/tickets/[id]` (why-decision, pipeline timeline, extraction, order, trace), `/approvals`, `/ops`, `/dashboard` (executive summary: business KPIs, charts, SLOs, risk), `/lifecycle` (lifecycle stages with live evidence), `/safety` (reliability, security and governance evidence)
-- `src/app/api/`: `POST /api/tickets`, `POST /api/approvals/[ticketId]`
+- `src/app/`: Inbox `/` (submit, recent tickets; rows open the detail view), `/tickets/[id]` (why-decision, pipeline timeline, extraction, order, trace), `/approvals`, `/ops`, `/prompts` (view prompt versions, diff two versions, promote/rollback/retire), `/simulate` (buttons that send realistic emails through the live pipeline), `/dashboard` (executive summary: business KPIs, charts, SLOs, risk), `/lifecycle` (lifecycle stages with live evidence), `/safety` (reliability, security and governance evidence)
+- `src/app/api/`: `POST /api/tickets`, `POST /api/approvals/[ticketId]`, `POST /api/simulate` (known sample ids only, dry run)
 - `src/components/`: `Nav`, `DecisionBadge`, `TicketForm`, `ApprovalButtons`
 - `src/lib/evaluate.ts`: pure `gradeCase` (pass = decision + reason_code, plus redaction count when expected) and failure taxonomy
 - `src/lib/releases.ts`: gate check, `promoteVersion`, `rollbackVersion`, `retireVersion` (one live, at most one standby)
@@ -51,6 +51,7 @@ LLM via Anthropic Messages API (`fetch`), or a no-key `heuristic` provider.
 - `src/lib/monitor.ts`: pure `evaluateRules` (7 alert rules), dedup, and `runMonitor` (reads last 50 tickets, inserts new alerts)
 - `src/components/`: `Nav` (vertical sidebar), `NavLinks`, `ThemeToggle` (dark default, saved in localStorage), `PageHeader`, `charts` (dependency-free SVG/Tailwind charts)
 - `src/app/ops/page.tsx`: SLO cards with trend sparklines, decision/reason/latency/eval charts, alerts, prompt versions (promote/rollback/retire), live metrics by prompt, recent eval runs
+- `src/lib/samples.ts` / `diff.ts`: curated simulator emails; pure line diff for the prompts page
 - `src/lib/explain.ts`: plain-English explanation for every reason code
 - `scripts/`: `seed`, `demo`, `eval`, `add-prompt`, `traffic`, `chaos`
 - `spec/`: spec, schema, seed orders, eval datasets, acceptance tests (read-only)

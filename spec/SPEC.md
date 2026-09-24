@@ -95,6 +95,8 @@ src/lib/metrics.ts
 src/lib/monitor.ts
 src/lib/releases.ts
 src/lib/explain.ts                           (M7, see §17.3)
+src/lib/diff.ts                              (M7, pure line diff for /prompts)
+src/lib/samples.ts                           (M7, curated emails for /simulate)
 src/app/layout.tsx                          (edit: theme script, sidebar shell)
 src/app/globals.css                         (edit: theme tokens only)
 src/app/page.tsx                            (Inbox)
@@ -102,6 +104,8 @@ src/app/tickets/[id]/page.tsx
 src/app/approvals/page.tsx
 src/app/ops/page.tsx
 src/app/dashboard/page.tsx                 (M7, see §10.4)
+src/app/prompts/page.tsx                   (M7, see §10.4)
+src/app/simulate/page.tsx                  (M7, see §10.4)
 src/app/lifecycle/page.tsx                  (M7, see §17.4)
 src/app/safety/page.tsx                     (M7, see §17.4)
 src/app/api/tickets/route.ts
@@ -111,6 +115,7 @@ src/app/api/prompt-versions/[id]/retire/route.ts
 src/app/api/prompt-versions/rollback/route.ts
 src/app/api/alerts/[id]/route.ts
 src/app/api/ops/check/route.ts
+src/app/api/simulate/route.ts               (M7, see §9)
 src/app/api/cron/monitor/route.ts
 src/components/Nav.tsx
 src/components/DecisionBadge.tsx
@@ -124,6 +129,7 @@ src/components/ThemeToggle.tsx              (client: dark/light switch)
 src/components/PageHeader.tsx               (title + description)
 src/components/ClickableRow.tsx             (client: table row that navigates)
 src/components/charts.tsx                   (hand-built SVG/Tailwind charts)
+src/components/SimulatorPanel.tsx           (client: /simulate buttons and results)
 tests/policy-v2.test.ts
 tests/decide.test.ts
 tests/extract.test.ts
@@ -131,6 +137,7 @@ tests/refunds.test.ts
 tests/evaluate.test.ts
 tests/metrics.test.ts
 tests/explain.test.ts
+tests/diff.test.ts
 components.json                             (provided)
 src/lib/utils.ts                            (provided — shadcn)
 src/components/ui/**                        (provided — shadcn, never edit)
@@ -507,6 +514,17 @@ Request `{ "action": "acknowledge" | "resolve" }`. Resolve sets `resolved_at`.
 | 404 | `NOT_FOUND` |
 | 409 | `ALREADY_RESOLVED` |
 
+### `POST /api/simulate` (M7)
+Request `{ "sample_id": "string" }` where the id is one of the curated samples in `src/lib/samples.ts` (ids of golden/adversarial cases such as `G01`, `A02`; never `drift`).
+Runs that sample through `processTicket` with the live prompt and `getModelFromEnv()`, `persist: true`, **`dryRun: true`**, `source: 'traffic'` and the sample's expected labels (so no refunds move, and live-accuracy metrics update).
+Only known ids are accepted, so the endpoint cannot send arbitrary text to the LLM. No auth (§16).
+| Status | Body |
+|---|---|
+| 201 | `{ sample_id, ticket_id, decision, reason_code, expected_decision, expected_reason_code, match, reply, prompt_version_id, latency_ms }` |
+| 400 | `VALIDATION_ERROR` |
+| 404 | `NOT_FOUND` (unknown sample) |
+| 503 | `NO_LIVE_PROMPT` |
+
 ### `POST /api/ops/check`
 Runs `runMonitor()`. Returns `200 { metrics, new_alerts }`. No auth (the app has no auth; see non-goals).
 
@@ -549,7 +567,8 @@ Desktop-first, content `max-w-6xl`, and it must work down to phone width (the si
 - `Nav` (server component) is a **vertical sidebar**: `aside` `md:sticky md:top-0 md:h-screen md:w-60 md:border-r bg-sidebar`. Top to bottom:
   logo (`R` tile + `RefundDesk`), `NavLinks` (client, `usePathname`, active link highlighted `bg-primary/15 text-primary`, inline SVG icons, no icon library),
   then pinned to the bottom: red `CHAOS: <mode>` badge if chaos ≠ `none`, `Live prompt: <id>` outline badge, `ThemeToggle`.
-- Links in order: Dashboard `/dashboard` (the logo also links there), Inbox `/` (also active on `/tickets/*`), Approvals `/approvals`, Ops `/ops`, Lifecycle `/lifecycle`, Safety `/safety`.
+- **Every page that renders `Nav` must be dynamic** (`export const dynamic = 'force-dynamic'`, or use request-time data): `Nav` reads the database, and a statically prerendered page freezes the sidebar (live prompt, chaos badge) at build time. `/simulate` is a static shell, so it needs the export too.
+- Links in order: Dashboard `/dashboard` (the logo also links there), Inbox `/` (also active on `/tickets/*`), Approvals `/approvals`, Simulator `/simulate`, Prompts `/prompts`, Ops `/ops`, Lifecycle `/lifecycle`, Safety `/safety`.
 - Every page starts with `PageHeader` (title + one-line description), except `/tickets/[id]` which has its own header row.
 
 ### 10.3 Charts (`src/components/charts.tsx`, no dependency)
@@ -607,6 +626,16 @@ Empty state (an `Alert`): "No tickets waiting for review."
    **Manual cost is an illustrative assumption**: named constants at the top of the file (`MANUAL_COST_PER_TICKET_USD = 4.5`, `MANUAL_HANDLE_MINUTES = 6`), and the page must say so on screen.
 4. "Service level objectives" (all 7, green/red/grey dot, same rules and `formatMetric` as `/ops`, last 50 tickets) beside average latency per day (`Sparkline`).
 5. Four risk KPI cards (PII redacted, PII leaks stored with red border when > 0, Attacks stopped = injections + identity spoofs, Refund value held), "Why tickets go to a human" (`HBarList`), and "Release status and active alerts" (version badges with latest golden/adversarial score, up to 3 active alerts).
+
+**`/prompts`** — where prompts are viewed (`PageProps<'/prompts'>`, `searchParams` `v` and `compare`; default `v` = the live version). Two columns: a list of every version (id, status badge, latest golden/adversarial score, notes; the selected one highlighted; links `?v=<id>`), and for the selected version:
+a `Card` with created, size (words, ≈tokens = chars/4), golden/adversarial score, regressions, live ticket count, live labeled accuracy, promoted, retired (with reason), notes, `PromptVersionActions`, and the gate reminder;
+and a `Card` with the full prompt text (`<pre>`, scrollable) or, when `compare=<other id>` is set, a line diff from the compared version to the selected one (`diffLines`: added green `+`, removed red `−`, counts in the title; long lines wrap), with "Compare with" chips and a `clear` link. Include the sentence that the prompt is untrusted-input-aware and that code, not the prompt, decides refunds.
+
+**`/simulate`** — live simulator (`PageHeader "Live simulator"`, `SimulatorPanel`). A "Send mixed traffic" `Card` with `Send 5 / 10 / 25 cases` (sequential calls to `POST /api/simulate` using `pickMixed`: 35% everyday, 35% policy, 20% attack, 10% hard; a `Stop` button and progress text while running);
+one `Card` per group (`everyday`, `policy`, `attack`, `hard`) listing each sample with title, `expect <decision>` badge, a one-line "what it shows" and a `Send` button; and a "Results this session" `Card` (newest first, max 100 rows: `# | Case (links to the ticket) | Expected | Actual | Reason code | Match ✓/✗ | Latency`)
+with a summary line (sent, matched %, average latency, links to `/dashboard` and `/ops`) and the note that labels assume the seed orders. All buttons disable while a run is in progress; errors in `Alert`.
+`samples.ts` holds ≥ 20 samples across the four groups (mirroring golden and adversarial cases, including one known weak spot for the baseline prompt), each with `expected` decision and reason code.
+The Dashboard header has a `Simulate live cases` link to this page.
 
 **`/lifecycle`, `/safety`** — see §17.4.
 
@@ -823,9 +852,9 @@ The instructor then runs, in order:
 **Accept:** `docs/postmortem.md` (Appendix B) complete; `prompt_versions` shows v1 retired, v2 standby, v3 live.
 
 ### M7 — Demo and teaching layer (after M5; M6 is a classroom event and may happen before or after)
-Implement §17 and the UI in §10: dark/light theme, sidebar, charts, ticket detail, `/lifecycle`, `/safety`, `scripts/demo.ts`, `src/lib/explain.ts` (+ `tests/explain.test.ts`), `GUIDE.md`.
+Implement §17 and the UI in §10: dark/light theme, sidebar, charts, `/dashboard`, ticket detail, `/lifecycle`, `/safety`, the prompt viewer `/prompts` (+ `src/lib/diff.ts`, `tests/diff.test.ts`), the live simulator `/simulate` (+ `src/lib/samples.ts`, `POST /api/simulate`), `scripts/demo.ts`, `src/lib/explain.ts` (+ `tests/explain.test.ts`), the CI workflow, and `GUIDE.md`.
 **Accept:** on a fresh clone, `npm run seed && npm run demo && npm run dev` gives a populated app; clicking any inbox row opens the detail view; the theme toggle persists across reload;
-`/dashboard`, `/lifecycle` and `/safety` render live numbers; the CI workflow (§17.6) is present; `npm test`, `npm run lint`, `npm run build` pass; and screenshots of `/dashboard`, `/`, `/tickets/[id]`, `/ops`, `/lifecycle`, `/safety` were checked in **both themes**.
+`/dashboard`, `/lifecycle` and `/safety` render live numbers; `/prompts` shows every prompt version and a diff between two of them; clicking `Send 5 cases` on `/simulate` adds 5 labeled dry-run tickets and the SLO cards on `/ops` change; the CI workflow (§17.6) is present; `npm test`, `npm run lint`, `npm run build` pass; and screenshots of `/dashboard`, `/`, `/tickets/[id]`, `/prompts` (with a diff), `/simulate` (after a batch), `/ops`, `/lifecycle`, `/safety` were checked in **both themes**.
 
 ### Module assignment mapping
 TDD on a deterministic component → M1–M2 · golden-set evaluation → M4 · production monitoring and alert
@@ -899,7 +928,7 @@ that covers **all seven course bullets** (lifecycle; TDD; EDD; monitoring/AIOps;
 
 ### 17.5 `GUIDE.md` (repo root)
 Sections, in order: 1 What is this (plain language + flow diagram); 2 Run it (prereqs, every terminal command, `.env.local` table, no-key `heuristic` option, tests/lint/build);
-3 Fill it with demo data (`npm run demo` options, what it generates, that it is simulated, `npm run eval` for eval history, `npm run seed -- --reset`); 4 Demo script (~8 min table: step, page, what to say/do; optional live incident with `chaos` + `traffic`);
+3 Fill it with demo data (`npm run demo` options, what it generates, that it is simulated, `npm run eval` for eval history, `npm run seed -- --reset`); 4 Demo script (~10 min table: step, page, what to say/do; must include Dashboard, Simulator (send a batch, then watch Dashboard/Ops move), Prompts (view, compare, gated promote), Inbox, ticket detail, Approvals, Ops, Safety, Lifecycle; optional live incident with `chaos` + `traffic`);
 5 Command cheat sheet + troubleshooting table; 6 Where things are (path table); then **Teaching reference for TAs and instructors**:
 A suggested 5-session arc; B concept-by-concept for **each of the seven course concepts** with *what to teach, where to see it, a 10-minute exercise, check-for-understanding questions, common misconceptions*;
 C grading/discussion ideas and pitfalls; D facilitator checklist before a live demo. Every command in the guide must be one that exists in `package.json`.
@@ -911,7 +940,14 @@ Triggers: `push` to `main` and every `pull_request`; `permissions: contents: rea
 - `audit`: `npm audit --omit=dev --audit-level=high`, advisory only (`continue-on-error`).
 CI must not call the LLM or the database, and must not run `eval`, `demo`, `seed` or `traffic`.
 
-### 17.7 Definition of done for UI work (applies to every UI change)
+### 17.7 Lessons that cost time (read before building UI)
+- A statically prerendered page freezes anything read from the database in the shared layout (the sidebar's live prompt). Make every page that renders `Nav` dynamic (§10.2).
+- The simulator sends real traffic: keep it **dry-run**, restrict it to known sample ids, and label it as simulated. Escalated dry-run tickets close immediately, so use the Inbox form to create a real `pending_approval` ticket.
+- Sample expectations assume the seed orders. A human approval (a real refund) changes an order; `npm run seed` restores it. Say so on the page.
+- Browser-check hydration-dependent buttons after a full page load (a click right after navigation can land before the client has hydrated).
+- `routes.d.ts` types (`PageProps`, `RouteContext`) are generated by `next build`/`next dev`; a bare `tsc --noEmit` on a fresh clone may report them missing, so type-check via `npm run build`.
+
+### 17.8 Definition of done for UI work (applies to every UI change)
 Run `npm run build`, start the app with demo data, and look at each changed page in a browser in **both** themes (screenshot). Check: no unstyled or overflowing content at ~1000 px wide, charts have labels or tooltips,
 the theme survives a reload, and no text claims something the data does not show (e.g. an amount of $0.00 for an escalation).
 
