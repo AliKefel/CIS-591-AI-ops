@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import NavLinks from '@/components/NavLinks';
+import ThemeToggle from '@/components/ThemeToggle';
 import { Badge } from '@/components/ui/badge';
 import { getDb } from '@/lib/db';
 
@@ -15,25 +17,25 @@ async function loadStatus(): Promise<{ live: string | null; chaos: string }> {
   }
 }
 
-const linkClass =
-  'rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
-
+// Vertical sidebar (stacks above the content on narrow screens).
 export default async function Nav() {
   const { live, chaos } = await loadStatus();
   return (
-    <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-      <nav className="mx-auto flex h-14 max-w-6xl items-center gap-1 px-4">
-        <Link href="/" className="mr-4 text-base font-semibold tracking-tight">
-          RefundDesk
-        </Link>
-        <Link href="/" className={linkClass}>Inbox</Link>
-        <Link href="/approvals" className={linkClass}>Approvals</Link>
-        <Link href="/ops" className={linkClass}>Ops</Link>
-        <div className="ml-auto flex items-center gap-2">
-          {chaos !== 'none' && <Badge className="bg-red-600 text-white">CHAOS: {chaos}</Badge>}
-          <Badge variant="outline">Live prompt: {live ?? 'none'}</Badge>
-        </div>
-      </nav>
-    </header>
+    <aside className="flex shrink-0 flex-col gap-4 border-b bg-sidebar p-4 text-sidebar-foreground md:sticky md:top-0 md:h-screen md:w-60 md:border-r md:border-b-0 md:p-5">
+      <Link href="/" className="flex items-center gap-2.5 px-1">
+        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">R</span>
+        <span className="text-base font-semibold tracking-tight">RefundDesk</span>
+      </Link>
+
+      <NavLinks />
+
+      <div className="flex flex-wrap items-center gap-2 md:mt-auto md:flex-col md:items-stretch">
+        {chaos !== 'none' && (
+          <Badge className="justify-center bg-red-600 text-white">CHAOS: {chaos}</Badge>
+        )}
+        <Badge variant="outline" className="justify-center">Live prompt: {live ?? 'none'}</Badge>
+        <ThemeToggle />
+      </div>
+    </aside>
   );
 }

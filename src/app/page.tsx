@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import DecisionBadge from '@/components/DecisionBadge';
+import ClickableRow from '@/components/ClickableRow';
+import PageHeader from '@/components/PageHeader';
 import TicketForm from '@/components/TicketForm';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +38,7 @@ export default async function InboxPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title="Inbox" description="Submit a customer email and review recent decisions." />
       <TicketForm />
       <Card>
         <CardHeader>
@@ -64,7 +67,7 @@ export default async function InboxPage() {
                 </TableRow>
               )}
               {tickets.map((t) => (
-                <TableRow key={t.id}>
+                <ClickableRow key={t.id} href={`/tickets/${t.id}`}>
                   <TableCell>
                     <Link href={`/tickets/${t.id}`} className="font-medium text-foreground underline-offset-4 hover:underline">
                       {new Date(t.created_at).toLocaleString()}
@@ -79,7 +82,7 @@ export default async function InboxPage() {
                   <TableCell className="tabular-nums">{t.latency_ms}</TableCell>
                   <TableCell className="tabular-nums">{Number(t.cost_usd).toFixed(6)}</TableCell>
                   <TableCell className="text-muted-foreground">{t.source}</TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>

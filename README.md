@@ -2,7 +2,7 @@
 
 AI support agent for **Trailhead Supply Co.** An LLM *extracts* facts from refund emails; deterministic code
 *decides*. Low-risk refunds are issued automatically, everything else goes to a human queue. Traces, metrics
-and alerts make it operable. Source of truth: `spec/SPEC.md` (never edited).
+and alerts make it operable. Source of truth: `spec/SPEC.md`. **New here? Read [GUIDE.md](GUIDE.md)** for how to run and demo it, plus a teaching reference for TAs and instructors.
 
 ```
 email → redactPII → LLM extract (retry/timeout) → decideTicket → evaluateRefund
@@ -23,6 +23,7 @@ LLM via Anthropic Messages API (`fetch`), or a no-key `heuristic` provider.
 |---|---|
 | `npm run dev` / `build` / `lint` | Dev server, production build, lint |
 | `npm test` | Unit + acceptance tests (`spec/tests/`, `tests/`) |
+| `npm run demo [-- --tickets N --days N --seed N]` | Wipe runtime data and fill the app with simulated demo data (see GUIDE.md) |
 | `npm run seed [-- --reset]` | Load 20 orders, chaos row, prompt v1 (`--reset` also clears tickets/spans/refunds/alerts) |
 | `npm run eval -- --prompt <id> [--dataset golden\|adversarial\|drift\|all]` | Offline eval (default golden + adversarial); exits 1 if a gate fails |
 | `npm run prompt:add -- <id> <path> [--notes "..."]` | Register a draft prompt version |
@@ -41,17 +42,22 @@ LLM via Anthropic Messages API (`fetch`), or a no-key `heuristic` provider.
 - `src/lib/refunds.ts`: `authorizeRefund` (agent ≤ $200, exact amount, delivered only) and `issueRefund`
 - `src/lib/trace.ts` / `pipeline.ts`: `processTicket` runs redact → extract → lookup → decide → refund → reply, recording a span per step
 - `src/lib/db.ts`: `getDb()`, the only DB access point; server code only
-- `src/app/`: Inbox `/` (submit + last 50 tickets), `/tickets/[id]` (email, extraction, decision, trace), `/approvals` (human queue)
+- `src/app/`: Inbox `/` (submit, recent tickets; rows open the detail view), `/tickets/[id]` (why-decision, pipeline timeline, extraction, order, trace), `/approvals`, `/ops`, `/lifecycle` (lifecycle stages with live evidence), `/safety` (reliability, security and governance evidence)
 - `src/app/api/`: `POST /api/tickets`, `POST /api/approvals/[ticketId]`
 - `src/components/`: `Nav`, `DecisionBadge`, `TicketForm`, `ApprovalButtons`
 - `src/lib/evaluate.ts`: pure `gradeCase` (pass = decision + reason_code, plus redaction count when expected) and failure taxonomy
 - `src/lib/releases.ts`: gate check, `promoteVersion`, `rollbackVersion`, `retireVersion` (one live, at most one standby)
 - `src/lib/metrics.ts`: pure `computeMetrics` (accuracy, nearest-rank p95, error/escalation/injection rates, cost, PII leaks) with minimum sample sizes
 - `src/lib/monitor.ts`: pure `evaluateRules` (7 alert rules), dedup, and `runMonitor` (reads last 50 tickets, inserts new alerts)
-- `src/app/ops/page.tsx`: SLO cards, alerts, prompt versions (promote/rollback/retire), live metrics by prompt, recent eval runs
-- `scripts/`: `seed`, `eval`, `add-prompt`, `traffic`, `chaos`
+- `src/components/`: `Nav` (vertical sidebar), `NavLinks`, `ThemeToggle` (dark default, saved in localStorage), `PageHeader`, `charts` (dependency-free SVG/Tailwind charts)
+- `src/app/ops/page.tsx`: SLO cards with trend sparklines, decision/reason/latency/eval charts, alerts, prompt versions (promote/rollback/retire), live metrics by prompt, recent eval runs
+- `src/lib/explain.ts`: plain-English explanation for every reason code
+- `scripts/`: `seed`, `demo`, `eval`, `add-prompt`, `traffic`, `chaos`
 - `spec/`: spec, schema, seed orders, eval datasets, acceptance tests (read-only)
 - `prompts/`: versioned LLM prompts
+
+## UI
+Shadcn/ui components (`src/components/ui/`) plus Tailwind; no chart or theme libraries. Dark theme is the default; the sidebar toggle switches to light and remembers the choice.
 
 ## Rules of the road
 Pure modules never read env or import `db.ts`; `src/lib/` and `scripts/` use relative imports; the LLM never decides money.
@@ -65,6 +71,7 @@ Pure modules never read env or import `db.ts`; `src/lib/` and `scripts/` use rel
 | M3 LLM layer, pipeline, tickets/approvals UI | done |
 | M4 Evals and prompt release management (code done; v2 prompt and eval report are student work) | in progress |
 | M5 Metrics, alerts, `/ops`, cron, traffic/chaos (code done; Vercel deploy pending) | in progress |
+| M7 Demo and teaching layer: demo data, ticket detail, Lifecycle and Safety pages, GUIDE.md | done |
 | M6 Game day: runbook, postmortem, retire v1 | todo |
 
 ## API

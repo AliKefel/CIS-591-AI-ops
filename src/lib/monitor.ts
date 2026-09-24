@@ -53,6 +53,14 @@ export function evaluateRules(metrics: Metrics): FiredRule[] {
   return fired;
 }
 
+// Human-friendly value for an alert's observed/threshold number.
+export function formatMetric(rule: string, v: number): string {
+  if (rule === 'P95_LATENCY_HIGH') return `${Math.round(v)} ms`;
+  if (rule === 'COST_HIGH') return `$${v.toFixed(4)}`;
+  if (rule === 'PII_LEAK') return String(v);
+  return `${(v * 100).toFixed(1)}%`;
+}
+
 // Dedup: skip rules that already have an open or acknowledged alert.
 export function filterNewRules(fired: FiredRule[], activeRules: Iterable<string>): FiredRule[] {
   const active = new Set(activeRules);

@@ -1,4 +1,6 @@
 import ApprovalButtons from '@/components/ApprovalButtons';
+import ClickableRow from '@/components/ClickableRow';
+import PageHeader from '@/components/PageHeader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -27,9 +29,11 @@ export default async function ApprovalsPage() {
   const tickets = (data ?? []) as Row[];
 
   return (
+    <div>
+    <PageHeader title="Approvals" description="Escalated tickets waiting for a human decision." />
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Approvals</CardTitle>
+        <CardTitle className="text-lg">Pending review</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && (
@@ -52,7 +56,7 @@ export default async function ApprovalsPage() {
             </TableHeader>
             <TableBody>
               {tickets.map((t) => (
-                <TableRow key={t.id} className="align-top">
+                <ClickableRow key={t.id} href={`/tickets/${t.id}`} className="align-top">
                   <TableCell>{new Date(t.created_at).toLocaleString()}</TableCell>
                   <TableCell>{t.from_email}</TableCell>
                   <TableCell>{t.order_id_extracted ?? '—'}</TableCell>
@@ -62,12 +66,13 @@ export default async function ApprovalsPage() {
                     {t.body_redacted.length > 120 ? `${t.body_redacted.slice(0, 120)}…` : t.body_redacted}
                   </TableCell>
                   <TableCell><ApprovalButtons ticketId={t.id} /></TableCell>
-                </TableRow>
+                </ClickableRow>
               ))}
             </TableBody>
           </Table>
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }

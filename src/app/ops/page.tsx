@@ -4,10 +4,13 @@ import RunChecksButton from '@/components/RunChecksButton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BarChart, HBarList, Sparkline, StackedBar } from '@/components/charts';
+import PageHeader from '@/components/PageHeader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getDb } from '@/lib/db';
 import { computeMetrics, type MetricTicket, type Metrics } from '@/lib/metrics';
-import { RULES, TICKET_METRIC_COLUMNS, type AlertRow } from '@/lib/monitor';
+import { containsPII } from '@/lib/redact';
+import { RULES, TICKET_METRIC_COLUMNS, formatMetric, type AlertRow } from '@/lib/monitor';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +34,43 @@ interface RunRow {
 }
 
 type GroupedTicket = MetricTicket & { prompt_version_id: string };
+
+// Per-metric series over tickets ordered oldest → newest. Rates are cumulative so the line shows how the SLO evolved.
+function metricSeries(tickets: MetricTicket[], metric: keyof Metrics): number[] {
+  const cumulative = (hit: (t: MetricTicket) => boolean, include: (t: MetricTicket) => boolean = () => true) => {
+    let seen = 0;
+    let hits = 0;
+    const out: number[] = [];
+    for (const t of tickets) {
+      if (!include(t)) continue;
+      seen++;
+      if (hit(t)) hits++;
+      out.push(hits / seen);
+    }
+    return out;
+  };
+  switch (metric) {
+    case 'live_accuracy':
+      return cumulative(
+        (t) => t.decision === t.expected_decision && t.reason_code === t.expected_reason_code,
+        (t) => t.expected_decision !== null && t.expected_reason_code !== null,
+      );
+    case 'p95_latency_ms':
+      return tickets.map((t) => t.latency_ms);
+    case 'llm_error_rate':
+      return cumulative((t) => t.llm_error);
+    case 'escalation_rate':
+      return cumulative((t) => t.decision === 'escalate');
+    case 'injection_rate':
+      return cumulative((t) => t.injection_detected === true);
+    case 'avg_cost_usd':
+      return tickets.map((t) => Number(t.cost_usd));
+    case 'pii_leaks': {
+      let leaks = 0;
+      return tickets.map((t) => (containsPII(t.body_redacted) ? ++leaks : leaks));
+    }
+  }
+}
 
 const pct = (v: number | null) => (v === null ? 'n/a' : `${(v * 100).toFixed(1)}%`);
 const ms = (v: number | null) => (v === null ? 'n/a' : `${Math.round(v)} ms`);
@@ -85,7 +125,9 @@ export default async function OpsPage() {
   ]);
 
   const loadError = [recent, live200, alertsRes, versionsRes, runsRes].find((r) => r.error)?.error;
-  const metrics = computeMetrics((recent.data ?? []) as unknown as MetricTicket[]);
+  const recentTickets = (recent.data ?? []) as unknown as MetricTicket[];
+  const chronological = [...recentTickets].reverse(); // oldest → newest for charts
+  const metrics = computeMetrics(recentTickets);
   const alerts = (alertsRes.data ?? []) as AlertRow[];
   const versions = (versionsRes.data ?? []) as VersionRow[];
   const runs = (runsRes.data ?? []) as RunRow[];
@@ -100,8 +142,32 @@ export default async function OpsPage() {
     byPrompt.set(t.prompt_version_id, [...(byPrompt.get(t.prompt_version_id) ?? []), t]);
   }
 
+  const decisionCount = (d: string) => recentTickets.filter((t) => t.decision === d).length;
+  const reasonCounts = new Map<string, number>();
+  for (const t of recentTickets) reasonCounts.set(t.reason_code, (reasonCounts.get(t.reason_code) ?? 0) + 1);
+  const topReasons = [...reasonCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([label, value]) => ({ label, value }));
+  const latencies = chronological.map((t) => t.latency_ms);
+  const latencyMax = Math.max(1000, ...latencies) * 1.1;
+  const p95Limit = RULES.find((r) => r.rule === 'P95_LATENCY_HIGH')?.threshold ?? 8000;
+  const evalBars = versions.flatMap((v) =>
+    (['golden', 'adversarial'] as const).flatMap((dataset) => {
+      const run = latest(v.id, dataset);
+      if (!run) return [];
+      const score = Number(run.score);
+      return [{
+        label: `${v.id} ${dataset === 'golden' ? 'golden' : 'adv.'}`,
+        value: score,
+        className: dataset === 'golden' ? 'bg-primary' : 'bg-violet-500',
+      }];
+    }),
+  );
+
   return (
     <div className="space-y-6">
+      <PageHeader title="Operations" description="Service levels, alerts, releases and evaluation history." />
       {loadError && (
         <Alert variant="destructive">
           <AlertDescription>Could not load some data: {loadError.message}</AlertDescription>
@@ -123,10 +189,66 @@ export default async function OpsPage() {
                 <CardContent>
                   <div className="text-2xl font-semibold tabular-nums">{slo.format(value)}</div>
                   <div className="mt-1 text-xs text-muted-foreground">Target {slo.target}</div>
+                  <div className={`mt-3 ${breached ? 'text-red-500' : 'text-primary'}`}>
+                    <Sparkline values={metricSeries(chronological, slo.metric)} className="text-current" />
+                  </div>
                 </CardContent>
               </Card>
             );
           })}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold tracking-tight">Trends</h2>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Card>
+            <CardHeader><CardTitle>Decision mix</CardTitle></CardHeader>
+            <CardContent>
+              <StackedBar
+                segments={[
+                  { label: 'approve', value: decisionCount('approve'), className: 'bg-green-600' },
+                  { label: 'deny', value: decisionCount('deny'), className: 'bg-red-600' },
+                  { label: 'escalate', value: decisionCount('escalate'), className: 'bg-amber-500' },
+                ]}
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Top reason codes</CardTitle></CardHeader>
+            <CardContent><HBarList items={topReasons} /></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Latency per ticket (ms)</CardTitle></CardHeader>
+            <CardContent>
+              <BarChart
+                items={chronological.map((t, i) => ({
+                  label: `Ticket ${i + 1}`,
+                  value: t.latency_ms,
+                  className: t.latency_ms > p95Limit ? 'bg-red-500' : 'bg-primary',
+                }))}
+                max={latencyMax}
+                threshold={p95Limit}
+                format={(v) => `${Math.round(v)} ms`}
+                emptyText="No tickets yet."
+              />
+              <p className="mt-2 text-xs text-muted-foreground">Oldest to newest, last 50 tickets. Dashed line is the 8 s p95 limit when in range.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Eval scores by prompt version</CardTitle></CardHeader>
+            <CardContent>
+              <BarChart
+                items={evalBars}
+                max={1}
+                threshold={0.9}
+                format={(v) => `${(v * 100).toFixed(1)}%`}
+                emptyText="No eval runs yet."
+                showLabels
+              />
+              <p className="mt-2 text-xs text-muted-foreground">Latest golden (blue) and adversarial (violet) run per version. Dashed line is the 90% release gate.</p>
+            </CardContent>
+          </Card>
         </div>
       </section>
 
@@ -148,8 +270,8 @@ export default async function OpsPage() {
                     <Badge variant="outline" className={a.severity === 'critical' ? 'border-red-600 text-red-600' : ''}>{a.severity}</Badge>
                   </TableCell>
                   <TableCell className="max-w-xs whitespace-normal">{a.message}</TableCell>
-                  <TableCell className="tabular-nums">{Number(a.observed)}</TableCell>
-                  <TableCell className="tabular-nums">{Number(a.threshold)}</TableCell>
+                  <TableCell className="tabular-nums">{formatMetric(a.rule, Number(a.observed))}</TableCell>
+                  <TableCell className="tabular-nums">{formatMetric(a.rule, Number(a.threshold))}</TableCell>
                   <TableCell><Badge variant="outline">{a.status}</Badge></TableCell>
                   <TableCell><AlertActions alertId={a.id} status={a.status as 'open' | 'acknowledged'} /></TableCell>
                 </TableRow>
