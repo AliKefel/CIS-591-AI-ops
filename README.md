@@ -44,13 +44,17 @@ Pure modules never read env or import `db.ts`; `src/lib/` and `scripts/` use rel
 | Milestone | State |
 |---|---|
 | M0 Setup (env, db, seed) | done |
-| M1 Deterministic core: base policy B1–B7, PII redaction | done |
-| M2 Policy v2 (TDD) | next |
-| M3 LLM layer, pipeline, tickets/approvals UI | todo |
+| M1 Deterministic core: base policy, PII redaction | done |
+| M2 Policy v2 (TDD): tiers, final sale, defects, abuse review | done |
+| M3 LLM layer, pipeline, tickets/approvals UI | next |
 | M4 Evals and prompt release management | todo |
 | M5 Metrics, alerts, `/ops`, cron, traffic/chaos | todo |
 | M6 Game day: runbook, postmortem, retire v1 | todo |
 
-## Policy (current: base policy)
-Deny: order missing, already refunded, not delivered, gift card, more than 30 days since delivery (day 30 allowed).
-Escalate: over $200. Otherwise approve the full amount.
+## Policy (v2, first match wins; `reason: other` counts as `changed_mind`)
+1. No order → deny · 2. Already refunded → deny · 3. In transit → deny · 4. Gift card → deny
+5. 3+ prior refunds → escalate (abuse review)
+6. Damaged / wrong item within 90 days → approve, or escalate if over $200
+7. Final sale → deny
+8. Past the return window (standard 30 days, gold 45; last day allowed) → deny
+9. Over $200 → escalate · 10. Otherwise approve the full amount
