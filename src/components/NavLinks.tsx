@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const LINKS = [
+  { href: '/dashboard', label: 'Dashboard', match: (p: string) => p.startsWith('/dashboard') },
   { href: '/', label: 'Inbox', match: (p: string) => p === '/' || p.startsWith('/tickets') },
   { href: '/approvals', label: 'Approvals', match: (p: string) => p.startsWith('/approvals') },
   { href: '/ops', label: 'Ops', match: (p: string) => p.startsWith('/ops') },
@@ -12,6 +13,7 @@ const LINKS = [
 ];
 
 const ICONS: Record<string, React.ReactNode> = {
+  '/dashboard': <path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z" />,
   '/': <path d="M3 13h5l2 3h4l2-3h5M5 5h14l2 8v6H3v-6z" />,
   '/approvals': <path d="M9 12l2 2 4-4M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />,
   '/ops': <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,

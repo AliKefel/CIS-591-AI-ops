@@ -22,7 +22,7 @@ export default async function Nav() {
   const { live, chaos } = await loadStatus();
   return (
     <aside className="flex shrink-0 flex-col gap-4 border-b bg-sidebar p-4 text-sidebar-foreground md:sticky md:top-0 md:h-screen md:w-60 md:border-r md:border-b-0 md:p-5">
-      <Link href="/" className="flex items-center gap-2.5 px-1">
+      <Link href="/dashboard" className="flex items-center gap-2.5 px-1">
         <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">R</span>
         <span className="text-base font-semibold tracking-tight">RefundDesk</span>
       </Link>

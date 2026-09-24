@@ -42,7 +42,7 @@ LLM via Anthropic Messages API (`fetch`), or a no-key `heuristic` provider.
 - `src/lib/refunds.ts`: `authorizeRefund` (agent ≤ $200, exact amount, delivered only) and `issueRefund`
 - `src/lib/trace.ts` / `pipeline.ts`: `processTicket` runs redact → extract → lookup → decide → refund → reply, recording a span per step
 - `src/lib/db.ts`: `getDb()`, the only DB access point; server code only
-- `src/app/`: Inbox `/` (submit, recent tickets; rows open the detail view), `/tickets/[id]` (why-decision, pipeline timeline, extraction, order, trace), `/approvals`, `/ops`, `/lifecycle` (lifecycle stages with live evidence), `/safety` (reliability, security and governance evidence)
+- `src/app/`: Inbox `/` (submit, recent tickets; rows open the detail view), `/tickets/[id]` (why-decision, pipeline timeline, extraction, order, trace), `/approvals`, `/ops`, `/dashboard` (executive summary: business KPIs, charts, SLOs, risk), `/lifecycle` (lifecycle stages with live evidence), `/safety` (reliability, security and governance evidence)
 - `src/app/api/`: `POST /api/tickets`, `POST /api/approvals/[ticketId]`
 - `src/components/`: `Nav`, `DecisionBadge`, `TicketForm`, `ApprovalButtons`
 - `src/lib/evaluate.ts`: pure `gradeCase` (pass = decision + reason_code, plus redaction count when expected) and failure taxonomy
@@ -55,6 +55,9 @@ LLM via Anthropic Messages API (`fetch`), or a no-key `heuristic` provider.
 - `scripts/`: `seed`, `demo`, `eval`, `add-prompt`, `traffic`, `chaos`
 - `spec/`: spec, schema, seed orders, eval datasets, acceptance tests (read-only)
 - `prompts/`: versioned LLM prompts
+
+## CI
+`.github/workflows/ci.yml` runs lint, tests and build on every push to `main` and every pull request, plus a secrets/hygiene check and an advisory dependency audit. It needs no secrets.
 
 ## UI
 Shadcn/ui components (`src/components/ui/`) plus Tailwind; no chart or theme libraries. Dark theme is the default; the sidebar toggle switches to light and remembers the choice.

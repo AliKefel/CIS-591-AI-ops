@@ -62,7 +62,10 @@ AGENTS.md                                   (provided)
 CLAUDE.md                                   (provided)
 .env.example
 vercel.json
+.github/workflows/ci.yml                  (M7, see §17.6)
 package.json                                (edit "scripts" only, see §14)
+README.md                                   (developer overview; update after every milestone)
+GUIDE.md                                    (M7: run/demo guide + teaching reference, see §17.5)
 prompts/v1.md                               (provided — the baseline prompt)
 prompts/v2.md, prompts/v3.md                [STUDENT CHOICE content] (M4, M6)
 spec/**                                     (provided — never edit)
@@ -74,6 +77,7 @@ scripts/eval.ts
 scripts/traffic.ts
 scripts/chaos.ts
 scripts/add-prompt.ts
+scripts/demo.ts                             (M7, see §17.1)
 src/lib/config.ts
 src/lib/types.ts
 src/lib/policy.ts
@@ -90,11 +94,16 @@ src/lib/evaluate.ts
 src/lib/metrics.ts
 src/lib/monitor.ts
 src/lib/releases.ts
-src/app/layout.tsx                          (edit: add <Nav/>)
+src/lib/explain.ts                           (M7, see §17.3)
+src/app/layout.tsx                          (edit: theme script, sidebar shell)
+src/app/globals.css                         (edit: theme tokens only)
 src/app/page.tsx                            (Inbox)
 src/app/tickets/[id]/page.tsx
 src/app/approvals/page.tsx
 src/app/ops/page.tsx
+src/app/dashboard/page.tsx                 (M7, see §10.4)
+src/app/lifecycle/page.tsx                  (M7, see §17.4)
+src/app/safety/page.tsx                     (M7, see §17.4)
 src/app/api/tickets/route.ts
 src/app/api/approvals/[ticketId]/route.ts
 src/app/api/prompt-versions/[id]/promote/route.ts
@@ -110,12 +119,18 @@ src/components/ApprovalButtons.tsx
 src/components/PromptVersionActions.tsx
 src/components/AlertActions.tsx
 src/components/RunChecksButton.tsx
+src/components/NavLinks.tsx                 (client: active-link highlight)
+src/components/ThemeToggle.tsx              (client: dark/light switch)
+src/components/PageHeader.tsx               (title + description)
+src/components/ClickableRow.tsx             (client: table row that navigates)
+src/components/charts.tsx                   (hand-built SVG/Tailwind charts)
 tests/policy-v2.test.ts
 tests/decide.test.ts
 tests/extract.test.ts
 tests/refunds.test.ts
 tests/evaluate.test.ts
 tests/metrics.test.ts
+tests/explain.test.ts
 components.json                             (provided)
 src/lib/utils.ts                            (provided — shadcn)
 src/components/ui/**                        (provided — shadcn, never edit)
@@ -508,52 +523,92 @@ Same as `/api/ops/check`, but requires `Authorization: Bearer <CRON_SECRET>` →
 ## 10. UI
 
 Use shadcn/ui components from `src/components/ui/` plus Tailwind utilities. Do not add, remove,
-or regenerate shadcn components, and do not run the shadcn CLI. Desktop-first, `max-w-6xl`.
-Component mapping (exact):
+or regenerate shadcn components, do not run the shadcn CLI, and do not add UI, theme or chart **libraries**.
+Desktop-first, content `max-w-6xl`, and it must work down to phone width (the sidebar stacks above the content below `md`).
+
+**Component mapping (exact):**
 - Page sections and SLO cards → `Card` (`CardHeader`, `CardTitle`, `CardContent`)
-- All tables → `Table`
+- All tables → `Table`. Rows that open a ticket use `ClickableRow` (a `TableRow` that navigates; links and buttons inside still work)
 - Forms → `Label` + `Input` / `Textarea`; actions → `Button` (primary actions default variant,
   Deny/Retire/Rollback use `variant="destructive"`, secondary actions `variant="outline"`)
-- Inline errors and the approvals empty state → `Alert`
+- Inline errors, notices and the approvals empty state → `Alert`
 - `DecisionBadge` → `Badge` with className: approve `bg-green-600`, deny `bg-red-600`, escalate `bg-amber-500`, white text
 - Status, severity, and prompt-version labels → `Badge variant="outline"`; critical severity and breached SLO cards → `border-red-600`
 
-**`Nav`** (in layout, all pages): `RefundDesk` · Inbox (`/`) · Approvals (`/approvals`) · Ops (`/ops`).
-Right side: `Live prompt: v1` badge; if chaos mode ≠ `none`, a red `CHAOS: <mode>` badge.
+### 10.1 Theme
+- **Dark is the default.** No theme library. `layout.tsx` puts class `dark` on `<html>` (with `suppressHydrationWarning`) and an inline
+  `<script>` in `<head>` that runs before paint: `localStorage['theme'] === 'light'` removes `dark`, anything else (or blocked storage) keeps it.
+- `ThemeToggle` (client) reads the `<html>` class via `useSyncExternalStore` + `MutationObserver`, toggles the class and writes `localStorage['theme']` (in try/catch).
+  Button text: `Light theme` while dark, `Dark theme` while light; `aria-label="Switch to <other> theme"`.
+- Tokens live in `globals.css` (`:root` light, `.dark` dark). Accent (`--primary`) is indigo (`oklch(0.5 0.2 265)` light, `oklch(0.65 0.19 265)` dark);
+  dark surfaces are slightly blue (`--background oklch(0.16 0.012 265)`, `--card oklch(0.21 0.014 265)`). `--font-sans` must point at `var(--font-geist-sans)`.
+- Never hard-code light-only colors; use tokens (`bg-background`, `text-muted-foreground`, `bg-primary`, ...). Semantic colors (green/red/amber) are allowed.
 
-**`/` Inbox**
-```
-┌ New ticket ─────────────────────────┐
-│ From email [          ]             │
-│ Subject    [          ]             │
-│ Body       [                     ]  │
-│ [Submit]  → result card: badge, reason_code, reply, latency │
-└─────────────────────────────────────┘
-Recent tickets (last 50, newest first)
-Time | From | Order | Decision | Reason code | Status | Prompt | Latency (ms) | Cost ($) | Source
-(row → /tickets/[id])
-```
+### 10.2 Shell and `Nav`
+- `layout.tsx`: `<div class="flex min-h-screen flex-col md:flex-row">` containing `<Nav/>` then `<main class="min-w-0 flex-1 px-4 py-8 md:px-8">` with an inner `mx-auto max-w-6xl`.
+- `Nav` (server component) is a **vertical sidebar**: `aside` `md:sticky md:top-0 md:h-screen md:w-60 md:border-r bg-sidebar`. Top to bottom:
+  logo (`R` tile + `RefundDesk`), `NavLinks` (client, `usePathname`, active link highlighted `bg-primary/15 text-primary`, inline SVG icons, no icon library),
+  then pinned to the bottom: red `CHAOS: <mode>` badge if chaos ≠ `none`, `Live prompt: <id>` outline badge, `ThemeToggle`.
+- Links in order: Dashboard `/dashboard` (the logo also links there), Inbox `/` (also active on `/tickets/*`), Approvals `/approvals`, Ops `/ops`, Lifecycle `/lifecycle`, Safety `/safety`.
+- Every page starts with `PageHeader` (title + one-line description), except `/tickets/[id]` which has its own header row.
 
-**`/tickets/[id]`** — header with decision badge and status; sections: Redacted email; Extraction
-(intent, order_id, reason, injection_detected, or "LLM failed"); Decision (reason_code, amount); Reply;
-Label (expected vs. actual with ✓/✗, only if labeled); Trace table:
-`Span | Attempt | Status | Duration (ms) | In tok | Out tok | Cost | Error`.
+### 10.3 Charts (`src/components/charts.tsx`, no dependency)
+Server-renderable, theme-aware, hover `title` tooltips:
+- `Sparkline({ values, className })`: SVG polyline + faint area; "Not enough data" under 2 points.
+- `BarChart({ items:[{label,value,className?}], max, threshold?, format?, emptyText?, showLabels? })`: vertical bars scaled to `max`;
+  optional dashed red threshold line (drawn only when `threshold <= max`); `showLabels` prints the value above and the label below each bar (for a handful of bars).
+- `HBarList({ items:[{label,value}], format? })`: ranked horizontal bars.
+- `StackedBar({ segments:[{label,value,className}], format? })`: one stacked bar with a legend showing values and percentages.
+- `StackedColumns({ columns:[{label, segments:[{label,value,className}]}] })`: one stacked column per bucket (e.g. per day), hover shows the counts.
+- `Ring({ value, label })`: circular progress for a 0..1 value, `n/a` when null.
 
-**`/approvals`** — tickets with `status = 'pending_approval'`, oldest first:
-`Time | From | Order | Reason code | Amount | Email preview (120 chars)` plus `ApprovalButtons` (Approve refund / Deny).
-Empty state: "No tickets waiting for review."
+### 10.4 Pages
 
-**`/ops`** — sections in this order:
-1. **SLO cards** (last 50 non-eval tickets): Live accuracy, p95 latency, LLM error rate, Escalation rate,
-   Injection rate, Avg cost/ticket, PII leaks. Each card shows its value, the threshold from §12.3, and a
-   red border when breached. Show `n/a` when below the minimum sample size.
-2. **Alerts** — open and acknowledged: `Time | Rule | Severity | Message | Observed | Threshold | Status` plus
-   `AlertActions` (Acknowledge, Resolve). `RunChecksButton` above the table.
-3. **Prompt versions** — `ID | Status | Created | Golden | Adversarial | Regressions | Notes` plus
-   `PromptVersionActions`: Promote (draft/standby), Rollback (only on the live row, only if a standby exists),
-   Retire (draft/standby; asks for a reason via `window.prompt`).
-4. **Live metrics by prompt version** (last 200 non-eval tickets): `Prompt | Tickets | Accuracy (labeled) | p95 ms | Avg cost | Escalation rate`.
-5. **Recent eval runs** (last 10): `Time | Prompt | Dataset | Score | Passed/Total | Regressions | Model`.
+**`/` Inbox** — `PageHeader "Inbox"`, then a `Card` "New ticket": `From email` and `Subject` side by side (`sm:grid-cols-2`), `Body` textarea, `Submit`;
+on success a result section (badge, reason_code, latency, reply) under a `Separator`; errors in `Alert variant="destructive"`.
+Then a `Card` "Recent tickets" (last 50, newest first):
+`Time | From | Order | Decision | Reason code | Status | Prompt | Latency (ms) | Cost ($) | Source`. **The whole row is clickable** (`ClickableRow`) and opens `/tickets/[id]`.
+
+**`/tickets/[id]`** (ticket detail; `notFound()` for a malformed id or a missing ticket). In order:
+1. Back link `← Back to inbox`; header row: `Ticket detail`, `DecisionBadge`, status badge with a friendly label
+   (`Closed automatically`, `Waiting for a human`, `Approved by a human`, `Denied by a human`), `dry run` badge if applicable, ticket id on the right.
+2. If `pending_approval`: an `Alert` "Human review required" containing `ApprovalButtons` (text must not state the ticket's `refund_amount_cents`, which is 0 for guardrail escalations; state the looked-up order amount instead).
+3. Four stat cards: Latency (hint: number of LLM attempts), Cost (hint: in/out tokens), Prompt version (hint: source), Created (date + time).
+4. **Why this decision**: `reason_code` chip, `stage · rule` badge (from `explainDecision`, §17.3), refund amount, the plain-English sentence, and the line
+   "The LLM only extracts facts. This decision came from deterministic code…".
+5. **Pipeline timeline**: a waterfall, one row per span (`name`, bar positioned by start offset from the first span and sized by duration, red when `status = error`, duration in ms).
+   Multiple `llm.extract` spans are numbered `#1`, `#2`; when retried, add the reliability note (and the LLM_UNAVAILABLE note when `llm_error`).
+6. Two columns: **Redacted email** (from, subject, body, badge "N PII item(s) redacted…", `injection detected` badge) and **What the LLM extracted** (or "LLM failed").
+7. Two columns: **Order looked up** (order id, customer + tier badge, order email in red with "(does not match the sender)" when it differs from `from_email`, product + category, amount,
+   days since delivery relative to `STORE_DATE`, prior refunds, order status; or an explanation when there is no order) and **Reply and authorization** (the reply, the least-privilege sentence, and one line per `refunds` row: amount and actor).
+8. **Label (synthetic traffic)** with ✓/✗ — only when labeled. 9. **Trace** table: `Span | Attempt | Status | Duration (ms) | In tok | Out tok | Cost | Error`.
+
+**`/approvals`** — `PageHeader`, `Card` "Pending review": tickets with `status = 'pending_approval'`, oldest first:
+`Time | From | Order | Reason code | Amount | Email preview (120 chars)` plus `ApprovalButtons` (Approve refund / Deny); rows open the ticket (`ClickableRow`).
+Empty state (an `Alert`): "No tickets waiting for review."
+
+**`/ops`** — `PageHeader "Operations"`, then in this order:
+1. **SLO cards** (last 50 tickets): Live accuracy, p95 latency, LLM error rate, Escalation rate, Injection rate, Avg cost/ticket, PII leaks. Each card shows value,
+   target, `n/a` below the minimum sample, `border-2 border-red-600` when breached (use `RULES` from `monitor.ts`), and a `Sparkline` of the underlying series
+   oldest→newest (rates are cumulative; latency and cost are per ticket; PII leaks is a running count; accuracy counts labeled tickets only).
+2. **Trends** (2×2 grid of `Card`s, last 50 tickets): Decision mix (`StackedBar`, approve green / deny red / escalate amber), Top reason codes (`HBarList`, top 6),
+   Latency per ticket (`BarChart`, bars over the p95 limit red, dashed 8 s line when in range), Eval scores by prompt version (`BarChart`, `max=1`, `threshold=0.9`, `showLabels`,
+   latest golden = primary color, adversarial = violet, labels like `v1 golden` / `v1 adv.`).
+3. **Alerts** — open and acknowledged: `Time | Rule | Severity | Message | Observed | Threshold | Status` plus `AlertActions`; `RunChecksButton` above the table.
+   Observed/threshold use `formatMetric(rule, value)` (percent for rates, `ms`, `$`, integer for PII).
+4. **Prompt versions** — `ID | Status | Created | Golden | Adversarial | Regressions | Notes` plus `PromptVersionActions`: Promote (draft/standby), Rollback (only on the live row, only if a standby exists), Retire (draft/standby; reason via `window.prompt`).
+5. **Live metrics by prompt version** (last 200 tickets): `Prompt | Tickets | Accuracy (labeled) | p95 ms | Avg cost | Escalation rate`.
+6. **Recent eval runs** (last 10): `Time | Prompt | Dataset | Score | Passed/Total | Regressions | Model`.
+
+**`/dashboard`** — executive summary of every other page (server component, `force-dynamic`, latest 1000 tickets; `PageHeader "Executive dashboard"`). Business-first, technical underneath, each card links to its detail page. In order:
+1. Six KPI cards with `Sparkline`s: Tickets handled, Automation rate (decision ≠ escalate), Refunds approved by AI ($), Awaiting human review (count + order value), Estimated savings, AI cost per ticket (4 decimals, with avg reply seconds).
+2. `StackedColumns` "Ticket volume by outcome" (last 14 days, approved green / denied red / escalated amber, with legend) beside a `Ring` "Automation rate".
+3. "Cost to serve: AI vs manual" (`HBarList`) and "Refund value by outcome" (`StackedBar`, order value by decision).
+   **Manual cost is an illustrative assumption**: named constants at the top of the file (`MANUAL_COST_PER_TICKET_USD = 4.5`, `MANUAL_HANDLE_MINUTES = 6`), and the page must say so on screen.
+4. "Service level objectives" (all 7, green/red/grey dot, same rules and `formatMetric` as `/ops`, last 50 tickets) beside average latency per day (`Sparkline`).
+5. Four risk KPI cards (PII redacted, PII leaks stored with red border when > 0, Attacks stopped = injections + identity spoofs, Refund value held), "Why tickets go to a human" (`HBarList`), and "Release status and active alerts" (version badges with latest golden/adversarial score, up to 3 active alerts).
+
+**`/lifecycle`, `/safety`** — see §17.4.
 
 ---
 
@@ -683,6 +738,7 @@ Rollback: `standby` → `live`; the failing `live` → `draft`. Exactly one `liv
 "eval": "node --env-file=.env.local --import tsx scripts/eval.ts",
 "traffic": "node --env-file=.env.local --import tsx scripts/traffic.ts",
 "chaos": "node --env-file=.env.local --import tsx scripts/chaos.ts",
+"demo": "node --env-file=.env.local --import tsx scripts/demo.ts",
 "prompt:add": "node --env-file=.env.local --import tsx scripts/add-prompt.ts"
 ```
 
@@ -692,6 +748,7 @@ Rollback: `standby` → `live`; the failing `live` → `draft`. Exactly one `liv
 | `eval` | §11.3 |
 | `traffic --scenario normal\|drift [--count N] [--base-url URL]` | `normal` cycles golden then adversarial cases in file order; `drift` cycles drift cases. Default count 50. Sequentially `POST /api/tickets` with `x-traffic-secret`, `dry_run: true`, and the expected labels. Prints a progress line per ticket, then calls `POST /api/ops/check` and prints any new alerts. |
 | `chaos <mode>` | Updates `chaos_config.mode`. |
+| `demo [--tickets N] [--days N] [--seed N]` | §17.1. Wipes runtime data and loads simulated demo data. |
 | `prompt:add <id> <path> [--notes "..."]` | Inserts a `draft` prompt version from the file. Error if the ID exists. |
 
 ---
@@ -765,6 +822,11 @@ The instructor then runs, in order:
 
 **Accept:** `docs/postmortem.md` (Appendix B) complete; `prompt_versions` shows v1 retired, v2 standby, v3 live.
 
+### M7 — Demo and teaching layer (after M5; M6 is a classroom event and may happen before or after)
+Implement §17 and the UI in §10: dark/light theme, sidebar, charts, ticket detail, `/lifecycle`, `/safety`, `scripts/demo.ts`, `src/lib/explain.ts` (+ `tests/explain.test.ts`), `GUIDE.md`.
+**Accept:** on a fresh clone, `npm run seed && npm run demo && npm run dev` gives a populated app; clicking any inbox row opens the detail view; the theme toggle persists across reload;
+`/dashboard`, `/lifecycle` and `/safety` render live numbers; the CI workflow (§17.6) is present; `npm test`, `npm run lint`, `npm run build` pass; and screenshots of `/dashboard`, `/`, `/tickets/[id]`, `/ops`, `/lifecycle`, `/safety` were checked in **both themes**.
+
 ### Module assignment mapping
 TDD on a deterministic component → M1–M2 · golden-set evaluation → M4 · production monitoring and alert
 thresholds → M5 · maintenance and rollback playbook → M6 runbook and postmortem.
@@ -774,10 +836,84 @@ thresholds → M5 · maintenance and rollback playbook → M6 runbook and postmo
 ## 16. Non-Goals (do not build)
 
 Authentication or user accounts · sending real emails · real payments · canary percentage routing or shadow
-traffic (future lab) · LLM-as-judge (future lab) · charts · streaming · providers other than Anthropic and
+traffic (future lab) · LLM-as-judge (future lab) · chart or theme **libraries** (hand-built charts in §10.3 are required) · streaming · providers other than Anthropic and
 heuristic · editing orders in the UI · mobile layouts beyond basic responsiveness.
 
 ---
+
+---
+
+## 17. Demo and Teaching Layer (M7)
+
+Goal: a professor or TA can open the app, see a rich two-week history in under a minute, click into any ticket to see *why* it was decided,
+and map every course concept (lifecycle, TDD, EDD, monitoring/AIOps, release and maintenance, reliability, security and governance) to something visible.
+
+### 17.1 `scripts/demo.ts` — `npm run demo [-- --tickets 400 --days 14 --seed 7]`
+Simulated data; **no LLM call, no money moves, deterministic for a given `--seed`** (use a small seeded PRNG, e.g. mulberry32). Imports from `../src/lib/*` (relative). Steps:
+1. **Reset** `spans`, `refunds`, `tickets`, `alerts`; upsert orders from `spec/seed/orders.json`; set chaos `none`. Require an existing `live` prompt (else "Run npm run seed first"). **Never modify `prompt_versions` or `eval_runs`** (they hold the student's real work); all demo tickets use the live version.
+2. **Cases:** cycle `spec/evals/golden.jsonl` + `adversarial.jsonl` (**never read `drift.jsonl`**, it is held back until M6). Pick routine (non-escalate) cases 72% of the time, escalation cases 28%.
+   Base extraction is built from each case's `expected` fields (defaults: intent `refund_request`, order_id `null`, reason `changed_mind`, injection `false`).
+3. **Real decisions:** every ticket's result comes from `decideTicket` (with the seed orders and `STORE_DATE`), the reply from `buildReply`, the body from `redactPII`. Do not hard-code decisions.
+4. **Timeline** over `--days` ending now, tickets at random times (sorted), with phases: `healthy` (5% model mistakes), `slow` (1 h at ~45% of the window: attempt 1 times out after 10 000 ms, attempt 2 takes 6.5–9.5 s),
+   `outage` (next 2 h: two HTTP 503 attempts, extraction `null` → `LLM_UNAVAILABLE`), `drift` (last 2.5 days: 30% mistakes, wider latency). Force ≥ 24 tickets into the slow+outage window.
+   Model mistakes mutate the extraction (off-by-one order id, missed injection, flipped reason, wrong intent) *before* `decideTicket` so accuracy falls naturally.
+   Healthy traffic also has ~3% one-retry tickets (HTTP 529 then success).
+5. **Spans** per ticket on one timeline: `redact`, one `llm.extract` per attempt (with a 500 ms backoff gap, tokens and cost from `MODEL_PRICING`), `db.lookup_order` only when an order id exists, `policy.decide`. Never emit `refund.issue` (no refund rows are created).
+6. **Ticket kinds:** ~55% of escalations become `source='ui'`, `dry_run=false` "customer" tickets: the 8 newest stay `pending_approval`, older ones become `approved_by_human`/`denied_by_human` (60/40).
+   Everything else is `source='traffic'`, `dry_run=true`, `status='closed'`, **with** `expected_decision`/`expected_reason_code` labels; `ui` tickets are unlabeled.
+7. **Alerts by replay:** every 10 tickets, run `evaluateRules(computeMetrics(last 50))`; open an alert when a rule fires (using the ticket's time), resolve it 45 minutes after it stops firing;
+   rules still firing at the end stay `open` (warnings alternate `acknowledged`). Never invent alert numbers.
+8. Batch inserts (≤ 500 rows). Print counts (tickets by decision and status, spans, alerts, active alerts) and a hint to run `npm run eval -- --prompt <live>` if `eval_runs` is empty.
+`seed --reset` remains the way to return to a clean state.
+
+### 17.2 Ticket detail requirements
+See §10.4. Data comes from `tickets`, `spans`, the looked-up `orders` row (`order_id_extracted`) and `refunds` for the ticket. Nothing on the page may be computed by an LLM.
+
+### 17.3 `src/lib/explain.ts` (pure) + `tests/explain.test.ts`
+```ts
+export interface Explanation { stage: 'Guardrail' | 'Policy' | 'Pipeline'; rule: string; summary: string }
+export const EXPLANATIONS: Record<ReasonCode, Explanation>;   // a missing ReasonCode is a type error
+export function explainDecision(code: string): Explanation | null;
+```
+Stage/rule mapping: G1 `LLM_UNAVAILABLE`, G2 `INJECTION_SUSPECTED`, G3 `NOT_A_REFUND`, G4 `MISSING_ORDER_ID`, G5 `IDENTITY_MISMATCH` (Guardrail);
+Rule 1 `ORDER_NOT_FOUND`, 2 `ALREADY_REFUNDED`, 3 `NOT_DELIVERED`, 4 `GIFT_CARD_NONREFUNDABLE`, 5 `REFUND_ABUSE_REVIEW`, 6 `DEFECTIVE_ITEM`, `Rule 6 / 9` `HIGH_VALUE_REVIEW`, 7 `FINAL_SALE`, 8 `OUTSIDE_WINDOW`, 10 `WITHIN_POLICY` (Policy);
+`REFUND_BLOCKED` → Pipeline / "Authorization". Summaries are one plain-English sentence for a non-engineer. Tests: stages for one code per stage, `null` for an unknown code, every entry has a rule and a sentence.
+`monitor.ts` also exports the pure `formatMetric(rule, value)` (percent for rates, `NNN ms`, `$0.0000`, integer for `PII_LEAK`).
+
+### 17.4 `/lifecycle` and `/safety` (server pages, live data, `force-dynamic`)
+**`/lifecycle`** — `PageHeader "Lifecycle"`. Eight `Card` stages in a 2-column grid, each with number, title, one-sentence concept, "In this app:" sentence, and an evidence box:
+1 Specify (static counts: 10 policy rules · 5 guardrails · 7 SLO metrics · 7 alert rules), 2 Build (the four `ModelProvider`s), 3 Test (TDD) (suite names),
+4 Evaluate (EDD) (latest golden/adversarial score and regressions per prompt version, or "Run: npm run eval -- --prompt v1"), 5 Release (a status badge per prompt version),
+6 Observe (last-50 accuracy, p95, count of active alerts in red when > 0), 7 Maintain (resolved alerts, rollbacks = versions whose `notes` contain "rolled back", human-decided tickets), 8 Retire (retired versions and reasons).
+Then a `Card` "Test-driven vs eval-driven development" (two columns: deterministic code → TDD; probabilistic model → EDD), then a `Table` "Where each course concept shows up"
+that covers **all seven course bullets** (lifecycle; TDD; EDD; monitoring/AIOps; release and maintenance; reliability and incident response; operational security and governance) plus human-in-the-loop, each linking to the page where it is visible.
+
+**`/safety`** — `PageHeader "Reliability & Safety"` (description states how many tickets it is based on: the latest 1000). Two sections:
+- *Reliability and incident response*: a sentence stating timeout/attempts/backoff from `config.ts`; four stat cards (Saved by retry = `llm.extract` spans with `attempt=2` and `status=ok`; Fell back to human = tickets with `llm_error`;
+  Timeouts = spans whose error contains "timed out"; Provider 5xx = spans whose error contains "HTTP 5"); a "Fault injection" card with the current chaos mode badge and the `npm run chaos` commands;
+  an "Alert history and incident timeline" table (last 15 alerts, all statuses): `Fired | Rule | Severity | Observed | Status | Time to resolve` (`still active` when unresolved).
+- *Operational security and governance*: four stat cards (PII redacted = sum of `redaction_count`, hint with ticket count; PII leaks stored = tickets whose stored body still matches `containsPII` — red border when > 0; Injections escalated; Identity spoofs stopped);
+  "Why tickets were escalated" (`HBarList` of escalation reason codes); "Least privilege and tool authorization" (table Agent: delivered, exact amount, ≤ $200 / Human: no cap, with live counts; plus the sentence that authorization is code, not prompt text, and the database is server-only with RLS);
+  "Red-team findings and residual risk" (`BarChart` of `eval_results.failure_category` counts across all runs, and a plain statement of the accepted risk and its owner).
+`redact.ts` exports `containsPII(text)` (same card/SSN patterns as `redactPII`, no shared regex state) for this purpose and for `metrics.ts`.
+
+### 17.5 `GUIDE.md` (repo root)
+Sections, in order: 1 What is this (plain language + flow diagram); 2 Run it (prereqs, every terminal command, `.env.local` table, no-key `heuristic` option, tests/lint/build);
+3 Fill it with demo data (`npm run demo` options, what it generates, that it is simulated, `npm run eval` for eval history, `npm run seed -- --reset`); 4 Demo script (~8 min table: step, page, what to say/do; optional live incident with `chaos` + `traffic`);
+5 Command cheat sheet + troubleshooting table; 6 Where things are (path table); then **Teaching reference for TAs and instructors**:
+A suggested 5-session arc; B concept-by-concept for **each of the seven course concepts** with *what to teach, where to see it, a 10-minute exercise, check-for-understanding questions, common misconceptions*;
+C grading/discussion ideas and pitfalls; D facilitator checklist before a live demo. Every command in the guide must be one that exists in `package.json`.
+
+### 17.6 Continuous integration (`.github/workflows/ci.yml`)
+Triggers: `push` to `main` and every `pull_request`; `permissions: contents: read`; cancel superseded runs. Node from `.nvmrc`, npm cache. Jobs:
+- `checks`: `npm ci` → `npm run lint` → `npm test` → `npm run build` (the build type-checks; give it placeholder `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LLM_PROVIDER=heuristic`, `CRON_SECRET`, because pages only touch the database at request time, so CI never needs real secrets).
+- `hygiene`: fail if `git grep` finds an Anthropic key (`sk-ant-…`) or a JWT-shaped string outside `package-lock.json`, or if `.env.local` is tracked.
+- `audit`: `npm audit --omit=dev --audit-level=high`, advisory only (`continue-on-error`).
+CI must not call the LLM or the database, and must not run `eval`, `demo`, `seed` or `traffic`.
+
+### 17.7 Definition of done for UI work (applies to every UI change)
+Run `npm run build`, start the app with demo data, and look at each changed page in a browser in **both** themes (screenshot). Check: no unstyled or overflowing content at ~1000 px wide, charts have labels or tooltips,
+the theme survives a reload, and no text claims something the data does not show (e.g. an amount of $0.00 for an escalation).
 
 ## Appendix A — `docs/runbook.md` template
 
