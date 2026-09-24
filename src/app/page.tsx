@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import DecisionBadge from '@/components/DecisionBadge';
 import TicketForm from '@/components/TicketForm';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getDb } from '@/lib/db';
 import type { Decision } from '@/lib/types';
 
@@ -20,6 +24,8 @@ interface Row {
   source: string;
 }
 
+const HEADERS = ['Time', 'From', 'Order', 'Decision', 'Reason code', 'Status', 'Prompt', 'Latency (ms)', 'Cost ($)', 'Source'];
+
 export default async function InboxPage() {
   const { data, error } = await getDb()
     .from('tickets')
@@ -29,46 +35,56 @@ export default async function InboxPage() {
   const tickets = (data ?? []) as Row[];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <TicketForm />
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Recent tickets</h2>
-        {error && <p className="text-sm text-red-600">Could not load tickets: {error.message}</p>}
-        <div className="overflow-x-auto rounded border border-gray-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
-              <tr>
-                {['Time', 'From', 'Order', 'Decision', 'Reason code', 'Status', 'Prompt', 'Latency (ms)', 'Cost ($)', 'Source'].map((h) => (
-                  <th key={h} className="px-3 py-2 font-medium">{h}</th>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Recent tickets</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>Could not load tickets: {error.message}</AlertDescription>
+            </Alert>
+          )}
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                {HEADERS.map((h) => (
+                  <TableHead key={h} className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{h}</TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {tickets.length === 0 && (
-                <tr><td colSpan={10} className="px-3 py-6 text-center text-gray-500">No tickets yet.</td></tr>
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={HEADERS.length} className="py-10 text-center text-muted-foreground">
+                    No tickets yet.
+                  </TableCell>
+                </TableRow>
               )}
               {tickets.map((t) => (
-                <tr key={t.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <Link href={`/tickets/${t.id}`} className="text-blue-700 hover:underline">
+                <TableRow key={t.id}>
+                  <TableCell>
+                    <Link href={`/tickets/${t.id}`} className="font-medium text-foreground underline-offset-4 hover:underline">
                       {new Date(t.created_at).toLocaleString()}
                     </Link>
-                  </td>
-                  <td className="px-3 py-2">{t.from_email}</td>
-                  <td className="px-3 py-2">{t.order_id_extracted ?? '—'}</td>
-                  <td className="px-3 py-2"><DecisionBadge decision={t.decision} /></td>
-                  <td className="px-3 py-2 font-mono text-xs">{t.reason_code}</td>
-                  <td className="px-3 py-2">{t.status}</td>
-                  <td className="px-3 py-2">{t.prompt_version_id}</td>
-                  <td className="px-3 py-2">{t.latency_ms}</td>
-                  <td className="px-3 py-2">{Number(t.cost_usd).toFixed(6)}</td>
-                  <td className="px-3 py-2">{t.source}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell>{t.from_email}</TableCell>
+                  <TableCell>{t.order_id_extracted ?? '—'}</TableCell>
+                  <TableCell><DecisionBadge decision={t.decision} /></TableCell>
+                  <TableCell className="font-mono text-xs">{t.reason_code}</TableCell>
+                  <TableCell><Badge variant="outline">{t.status}</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{t.prompt_version_id}</Badge></TableCell>
+                  <TableCell className="tabular-nums">{t.latency_ms}</TableCell>
+                  <TableCell className="tabular-nums">{Number(t.cost_usd).toFixed(6)}</TableCell>
+                  <TableCell className="text-muted-foreground">{t.source}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

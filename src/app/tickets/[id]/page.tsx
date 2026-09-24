@@ -1,5 +1,8 @@
 import { notFound } from 'next/navigation';
 import DecisionBadge from '@/components/DecisionBadge';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -8,11 +11,17 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded border border-gray-200 bg-white p-4">
-      <h2 className="mb-2 text-sm font-semibold uppercase text-gray-500">{title}</h2>
-      {children}
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
+}
+
+function Fields({ children }: { children: React.ReactNode }) {
+  return <dl className="grid grid-cols-[10rem_1fr] gap-x-4 gap-y-2 text-sm [&>dt]:text-muted-foreground">{children}</dl>;
 }
 
 export default async function TicketPage(props: PageProps<'/tickets/[id]'>) {
@@ -30,38 +39,40 @@ export default async function TicketPage(props: PageProps<'/tickets/[id]'>) {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">Ticket</h1>
+      <header className="flex flex-wrap items-center gap-3">
+        <h1 className="text-xl font-semibold tracking-tight">Ticket</h1>
         <DecisionBadge decision={ticket.decision} />
-        <span className="text-sm text-gray-600">{ticket.status}</span>
-        <span className="ml-auto font-mono text-xs text-gray-400">{ticket.id}</span>
+        <Badge variant="outline">{ticket.status}</Badge>
+        <span className="ml-auto font-mono text-xs text-muted-foreground">{ticket.id}</span>
       </header>
 
       <Section title="Redacted email">
-        <p className="text-sm text-gray-600">From: {ticket.from_email}</p>
-        <p className="text-sm text-gray-600">Subject: {ticket.subject}</p>
-        <pre className="mt-2 whitespace-pre-wrap rounded bg-gray-50 p-3 text-sm">{ticket.body_redacted}</pre>
-        <p className="mt-1 text-xs text-gray-500">Redactions: {ticket.redaction_count}</p>
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <p>From: <span className="text-foreground">{ticket.from_email}</span></p>
+          <p>Subject: <span className="text-foreground">{ticket.subject}</span></p>
+        </div>
+        <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-muted p-3 font-sans text-sm">{ticket.body_redacted}</pre>
+        <p className="mt-2 text-xs text-muted-foreground">Redactions: {ticket.redaction_count}</p>
       </Section>
 
       <Section title="Extraction">
         {ticket.llm_error ? (
-          <p className="text-sm text-red-600">LLM failed</p>
+          <p className="text-sm font-medium text-destructive">LLM failed</p>
         ) : (
-          <dl className="grid grid-cols-[10rem_1fr] gap-1 text-sm">
-            <dt className="text-gray-500">intent</dt><dd>{ticket.intent}</dd>
-            <dt className="text-gray-500">order_id</dt><dd>{ticket.order_id_extracted ?? 'null'}</dd>
-            <dt className="text-gray-500">reason</dt><dd>{ticket.reason ?? 'null'}</dd>
-            <dt className="text-gray-500">injection_detected</dt><dd>{String(ticket.injection_detected)}</dd>
-          </dl>
+          <Fields>
+            <dt>intent</dt><dd>{ticket.intent}</dd>
+            <dt>order_id</dt><dd>{ticket.order_id_extracted ?? 'null'}</dd>
+            <dt>reason</dt><dd>{ticket.reason ?? 'null'}</dd>
+            <dt>injection_detected</dt><dd>{String(ticket.injection_detected)}</dd>
+          </Fields>
         )}
       </Section>
 
       <Section title="Decision">
-        <dl className="grid grid-cols-[10rem_1fr] gap-1 text-sm">
-          <dt className="text-gray-500">reason_code</dt><dd className="font-mono">{ticket.reason_code}</dd>
-          <dt className="text-gray-500">amount</dt><dd>${(ticket.refund_amount_cents / 100).toFixed(2)}</dd>
-        </dl>
+        <Fields>
+          <dt>reason_code</dt><dd className="font-mono">{ticket.reason_code}</dd>
+          <dt>amount</dt><dd>${(ticket.refund_amount_cents / 100).toFixed(2)}</dd>
+        </Fields>
       </Section>
 
       <Section title="Reply">
@@ -72,37 +83,37 @@ export default async function TicketPage(props: PageProps<'/tickets/[id]'>) {
         <Section title="Label">
           <p className="text-sm">
             Expected: {ticket.expected_decision} / {ticket.expected_reason_code} · Actual: {ticket.decision} / {ticket.reason_code}{' '}
-            <span className={match ? 'text-green-600' : 'text-red-600'}>{match ? '✓' : '✗'}</span>
+            <span className={match ? 'font-semibold text-green-600' : 'font-semibold text-red-600'}>{match ? '✓' : '✗'}</span>
           </p>
         </Section>
       )}
 
       <Section title="Trace">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 text-xs uppercase text-gray-500">
-              <tr>
-                {['Span', 'Attempt', 'Status', 'Duration (ms)', 'In tok', 'Out tok', 'Cost', 'Error'].map((h) => (
-                  <th key={h} className="px-3 py-2 font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {spans.map((s) => (
-                <tr key={s.id} className="border-b border-gray-100 last:border-0">
-                  <td className="px-3 py-2 font-mono text-xs">{s.name}</td>
-                  <td className="px-3 py-2">{s.attempt}</td>
-                  <td className={`px-3 py-2 ${s.status === 'error' ? 'text-red-600' : ''}`}>{s.status}</td>
-                  <td className="px-3 py-2">{s.duration_ms}</td>
-                  <td className="px-3 py-2">{s.input_tokens}</td>
-                  <td className="px-3 py-2">{s.output_tokens}</td>
-                  <td className="px-3 py-2">{Number(s.cost_usd).toFixed(6)}</td>
-                  <td className="px-3 py-2 text-gray-600">{s.error_message ?? ''}</td>
-                </tr>
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              {['Span', 'Attempt', 'Status', 'Duration (ms)', 'In tok', 'Out tok', 'Cost', 'Error'].map((h) => (
+                <TableHead key={h} className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{h}</TableHead>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {spans.map((s) => (
+              <TableRow key={s.id}>
+                <TableCell className="font-mono text-xs">{s.name}</TableCell>
+                <TableCell>{s.attempt}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={s.status === 'error' ? 'border-red-600 text-red-600' : ''}>{s.status}</Badge>
+                </TableCell>
+                <TableCell className="tabular-nums">{s.duration_ms}</TableCell>
+                <TableCell className="tabular-nums">{s.input_tokens}</TableCell>
+                <TableCell className="tabular-nums">{s.output_tokens}</TableCell>
+                <TableCell className="tabular-nums">{Number(s.cost_usd).toFixed(6)}</TableCell>
+                <TableCell className="max-w-md whitespace-normal text-muted-foreground">{s.error_message ?? ''}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </Section>
     </div>
   );

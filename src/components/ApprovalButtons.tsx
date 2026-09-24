@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 
 export default function ApprovalButtons({ ticketId }: { ticketId: string }) {
   const router = useRouter();
@@ -31,24 +33,20 @@ export default function ApprovalButtons({ ticketId }: { ticketId: string }) {
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className="flex gap-2">
-        <button
-          onClick={() => act('approve')}
-          disabled={pending}
-          className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
-        >
+        <Button size="sm" onClick={() => act('approve')} disabled={pending}>
           Approve refund
-        </button>
-        <button
-          onClick={() => act('deny')}
-          disabled={pending}
-          className="rounded bg-red-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
-        >
+        </Button>
+        <Button size="sm" variant="destructive" onClick={() => act('deny')} disabled={pending}>
           Deny
-        </button>
+        </Button>
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && (
+        <Alert variant="destructive" className="max-w-xs">
+          <AlertDescription className="text-xs">{error}</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

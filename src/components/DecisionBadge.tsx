@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import type { Decision } from '@/lib/types';
 
 const STYLES: Record<Decision, string> = {
@@ -7,9 +8,5 @@ const STYLES: Record<Decision, string> = {
 };
 
 export default function DecisionBadge({ decision }: { decision: Decision }) {
-  return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold text-white ${STYLES[decision]}`}>
-      {decision}
-    </span>
-  );
+  return <Badge className={`${STYLES[decision]} text-white capitalize`}>{decision}</Badge>;
 }

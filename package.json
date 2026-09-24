@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "seed": "node --env-file=.env.local --import tsx scripts/seed.ts",
-    "eval": "tsx scripts/eval.ts"
+    "eval": "node --env-file=.env.local --import tsx scripts/eval.ts",
+    "prompt:add": "node --env-file=.env.local --import tsx scripts/add-prompt.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",

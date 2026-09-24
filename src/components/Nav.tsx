@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 import { getDb } from '@/lib/db';
 
 async function loadStatus(): Promise<{ live: string | null; chaos: string }> {
@@ -14,24 +15,25 @@ async function loadStatus(): Promise<{ live: string | null; chaos: string }> {
   }
 }
 
+const linkClass =
+  'rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
+
 export default async function Nav() {
   const { live, chaos } = await loadStatus();
   return (
-    <nav className="border-b border-gray-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3 text-sm">
-        <span className="text-base font-bold text-gray-900">RefundDesk</span>
-        <Link href="/" className="text-gray-600 hover:text-gray-900">Inbox</Link>
-        <Link href="/approvals" className="text-gray-600 hover:text-gray-900">Approvals</Link>
-        <Link href="/ops" className="text-gray-600 hover:text-gray-900">Ops</Link>
+    <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
+      <nav className="mx-auto flex h-14 max-w-6xl items-center gap-1 px-4">
+        <Link href="/" className="mr-4 text-base font-semibold tracking-tight">
+          RefundDesk
+        </Link>
+        <Link href="/" className={linkClass}>Inbox</Link>
+        <Link href="/approvals" className={linkClass}>Approvals</Link>
+        <Link href="/ops" className={linkClass}>Ops</Link>
         <div className="ml-auto flex items-center gap-2">
-          {chaos !== 'none' && (
-            <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">CHAOS: {chaos}</span>
-          )}
-          <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-            Live prompt: {live ?? 'none'}
-          </span>
+          {chaos !== 'none' && <Badge className="bg-red-600 text-white">CHAOS: {chaos}</Badge>}
+          <Badge variant="outline">Live prompt: {live ?? 'none'}</Badge>
         </div>
-      </div>
-    </nav>
+      </nav>
+    </header>
   );
 }
