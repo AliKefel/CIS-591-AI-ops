@@ -10,3 +10,8 @@ export function redactPII(text: string): { text: string; count: number } {
     .replace(CARD, () => (count++, '[REDACTED_CARD]'));
   return { text: out, count };
 }
+
+// True if text still contains an unredacted card number or SSN (used to detect leaks in stored data).
+export function containsPII(text: string): boolean {
+  return new RegExp(SSN.source).test(text) || new RegExp(CARD.source).test(text);
+}

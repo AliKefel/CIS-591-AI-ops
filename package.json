@@ -10,6 +10,8 @@
     "test": "vitest run",
     "seed": "node --env-file=.env.local --import tsx scripts/seed.ts",
     "eval": "node --env-file=.env.local --import tsx scripts/eval.ts",
+    "traffic": "node --env-file=.env.local --import tsx scripts/traffic.ts",
+    "chaos": "node --env-file=.env.local --import tsx scripts/chaos.ts",
     "prompt:add": "node --env-file=.env.local --import tsx scripts/add-prompt.ts"
   },
   "dependencies": {

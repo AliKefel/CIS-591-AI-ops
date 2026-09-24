@@ -26,8 +26,8 @@ LLM via Anthropic Messages API (`fetch`), or a no-key `heuristic` provider.
 | `npm run seed [-- --reset]` | Load 20 orders, chaos row, prompt v1 (`--reset` also clears tickets/spans/refunds/alerts) |
 | `npm run eval -- --prompt <id> [--dataset golden\|adversarial\|drift\|all]` | Offline eval (default golden + adversarial); exits 1 if a gate fails |
 | `npm run prompt:add -- <id> <path> [--notes "..."]` | Register a draft prompt version |
-
-Planned (later milestones): `traffic`, `chaos`.
+| `npm run traffic -- --scenario normal\|drift [--count N] [--base-url URL]` | Send labeled synthetic tickets (dry run), then run the monitor and print new alerts |
+| `npm run chaos -- none\|latency\|errors` | Fault injection for game day (`latency` = 9 s LLM delay, `errors` = HTTP 503) |
 
 ## Layout
 - `src/lib/config.ts`: constants (`STORE_DATE` is "now" for all policy decisions, thresholds, pricing, gates)
@@ -46,7 +46,10 @@ Planned (later milestones): `traffic`, `chaos`.
 - `src/components/`: `Nav`, `DecisionBadge`, `TicketForm`, `ApprovalButtons`
 - `src/lib/evaluate.ts`: pure `gradeCase` (pass = decision + reason_code, plus redaction count when expected) and failure taxonomy
 - `src/lib/releases.ts`: gate check, `promoteVersion`, `rollbackVersion`, `retireVersion` (one live, at most one standby)
-- `scripts/seed.ts`, `scripts/eval.ts`, `scripts/add-prompt.ts`: seeding, offline evals, adding draft prompts
+- `src/lib/metrics.ts`: pure `computeMetrics` (accuracy, nearest-rank p95, error/escalation/injection rates, cost, PII leaks) with minimum sample sizes
+- `src/lib/monitor.ts`: pure `evaluateRules` (7 alert rules), dedup, and `runMonitor` (reads last 50 tickets, inserts new alerts)
+- `src/app/ops/page.tsx`: SLO cards, alerts, prompt versions (promote/rollback/retire), live metrics by prompt, recent eval runs
+- `scripts/`: `seed`, `eval`, `add-prompt`, `traffic`, `chaos`
 - `spec/`: spec, schema, seed orders, eval datasets, acceptance tests (read-only)
 - `prompts/`: versioned LLM prompts
 
@@ -60,8 +63,8 @@ Pure modules never read env or import `db.ts`; `src/lib/` and `scripts/` use rel
 | M1 Deterministic core: base policy, PII redaction | done |
 | M2 Policy v2 (TDD): tiers, final sale, defects, abuse review | done |
 | M3 LLM layer, pipeline, tickets/approvals UI | done |
-| M4 Evals and prompt release management (code done; v2 prompt, eval report, `/ops` table pending) | in progress |
-| M5 Metrics, alerts, `/ops`, cron, traffic/chaos | todo |
+| M4 Evals and prompt release management (code done; v2 prompt and eval report are student work) | in progress |
+| M5 Metrics, alerts, `/ops`, cron, traffic/chaos (code done; Vercel deploy pending) | in progress |
 | M6 Game day: runbook, postmortem, retire v1 | todo |
 
 ## API
@@ -71,7 +74,15 @@ Pure modules never read env or import `db.ts`; `src/lib/` and `scripts/` use rel
 - `POST /api/prompt-versions/[id]/promote`: gated (latest golden and adversarial runs each ≥ 90% with 0 regressions) → 200 `{live, standby}`; 404 / 409 `ALREADY_LIVE` `RETIRED` `GATE_FAILED`.
 - `POST /api/prompt-versions/rollback`: no gate; standby becomes live, the failing live returns to draft → 200 `{live, rolled_back}`; 409 `NO_STANDBY`.
 - `POST /api/prompt-versions/[id]/retire` `{reason}` (min 5 chars) → 200 `{version}`; 404 / 409 `CANNOT_RETIRE_LIVE` `ALREADY_RETIRED`.
+- `POST /api/alerts/[id]` `{action: acknowledge|resolve}` → 200 `{alert}`; 404 / 409 `ALREADY_RESOLVED`.
+- `POST /api/ops/check` runs the monitor → `{metrics, new_alerts}`. `GET /api/cron/monitor` does the same with `Authorization: Bearer <CRON_SECRET>` (else 401);
+  `vercel.json` schedules it daily at 12:00 UTC.
 - Errors are always `{error, message, details?}`.
+
+## Monitoring
+Metrics use the last 50 tickets and stay `n/a` below their minimum sample (20 labeled for accuracy; 10 for p95 and LLM errors; 20 for escalation and injection rates).
+Alerts fire strictly past the threshold, critical: accuracy < 85%, LLM error rate > 10%, any PII leak; warning: p95 > 8 s, escalation > 40%, injection > 20%, avg cost > $0.01.
+An open or acknowledged alert for a rule suppresses new ones for that rule. Chaos mode wraps the LLM for ticket traffic only (never evals).
 
 ## Evals
 `spec/evals/` holds `golden` (17), `adversarial` (10) and `drift` (held back until M6). The runner refuses to start if DB orders differ from
